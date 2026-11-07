@@ -2,19 +2,14 @@
 
 ## Threat model
 
-`github.com/Trysac/u155-webhook-relay` is a pure library without I/O. The main risks are:
+This library implements a relay, not a generic proxy. Defenses include:
 
-- **Supply chain**: a compromised dependency or CI action. Mitigation: standard library only,
-  `go.sum` verification, `govulncheck` in the local gates, Dependabot weekly updates, actions
-  pinned by commit SHA, minimal workflow permissions.
-- **Leaked secrets**: tokens committed by mistake. Mitigation: `gitleaks` runs in the local gates
-  and in CI; `.env` files are git-ignored.
-- **Untrusted input**: callers may pass hostile strings. Mitigation: validate input and return
-  explicit errors; never use `unsafe` or `os/exec` with untrusted data.
+- **Inbound Verification**: Enforces HMAC-SHA256 validation on all incoming requests using the provided `InboundSecret`. Rejects invalid signatures with 401 Unauthorized.
+- **Resource Exhaustion**: Uses `http.MaxBytesReader` to enforce `MaxBodyBytes` (default 1MiB) to prevent memory exhaustion attacks.
+- **Secrets Handling**: `OnEvent` callbacks and internal logging are designed to prevent leaking the inbound secret, outbound secret, or webhook payloads in error messages. Dead-letter error messages are truncated to 200 bytes.
 
-## Publishing
+## Not defended
 
-Releases are git tags served through the Go module proxy and checksum database. No registry token
-is stored in the repository.
-
-To report a vulnerability, see [SECURITY.md](../SECURITY.md).
+- **Replay attacks**: The relay does not track or store nonces/timestamps for replay prevention.
+- **Persistence**: Data is held in-memory; a process crash results in data loss.
+- **External system security**: Assumes the `TargetURL` provided is trusted by the administrator.

@@ -3,23 +3,16 @@
 ## Running
 
 ```sh
-go test -cover .          # tests with coverage summary
-go run ./scripts/check    # every gate, as CI and the factory run it
+go test -race -cover . 
 ```
 
-## Policy
+## Coverage
 
-- Statement coverage of the library (every package except `scripts/`) must stay at or above 80 %;
-  the gate fails below it.
-- Tests live in package `webhookrelay_test` and exercise the public API only. They assert every
-  observable effect: return values, returned errors (`errors.Is`) and their messages.
-- Prefer table-driven tests with `t.Run` subtests; document usage with runnable `Example`
-  functions, which `go test` verifies through their `// Output:` comments.
-- The race detector runs whenever cgo and a C compiler are available (always in Linux CI); the
-  gate prints why when it has to run without it.
-- Each bug fix starts with a failing test that reproduces it.
-- Tests are deterministic: no network, no wall clock, no dependence on test order.
+- Tests cover the public API using table-driven tests with subtests (`t.Run`).
+- Every observable effect is asserted, including return values, status codes, and error types using `errors.Is`.
+- Examples are used to document usage, with `// Output:` comments verified by `go test`.
 
-## Layout
+## Test Files
 
-`<file>_test.go` sits next to the file it tests. Fixtures and golden files go in `testdata/`.
+- `relay_test.go`: Exercises the full lifecycle (ServeHTTP -> queue -> Run delivery -> DeadLetter/Success) using a fake Doer to inject network errors (500, 429) and a fake Sleep function to verify backoff timing without waiting real time.
+- Fixtures and golden files are stored in `testdata/`.
