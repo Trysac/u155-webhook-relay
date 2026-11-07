@@ -1,0 +1,48 @@
+# Thin wrapper around the local gates (scripts/check). The gates themselves live in the repo;
+# this workflow only re-runs them. Every job is skipped while the repository is private.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    if: ${{ !github.event.repository.private }}
+    name: gates (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      # gitleaks runs in its own job below with the official action.
+      FABRICA_ALLOW_MISSING_GITLEAKS: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: stable
+      - run: go mod download
+      - run: go run ./scripts/check
+
+  secrets:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only needed if the repository belongs to a GitHub organization (free for personal accounts).
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
