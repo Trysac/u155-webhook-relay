@@ -1,55 +1,45 @@
 # webhook-relay
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/Trysac/u155-webhook-relay.svg)](https://pkg.go.dev/github.com/Trysac/u155-webhook-relay)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/Trysac/u155-webhook-relay/actions/workflows/ci.yml/badge.svg)](https://github.com/Trysac/u155-webhook-relay/actions/workflows/ci.yml)
+Store-and-forward webhook relay for Go applications with HMAC-SHA256 verification, in-memory queueing, outbound re-signing, exponential backoff, and dead-letter auditing. This package addresses the issue where webhook senders time out during receiver downtime or slow processing, causing event loss. It acts as an http.Handler to accept webhooks quickly after validation, then uses a background worker to deliver them with retries.
 
-Store-and-forward webhook relay: verify an inbound HMAC-SHA256 signature, queue in bounded memory and deliver with re-signing, exponential backoff and a dead-letter list
+## Installation
 
-## Problem
-
-Describe in two or three sentences the concrete problem this utility solves, who hits it, and what
-they do today without it. Replace this paragraph when the first real feature lands.
-
-## Install
-
-```sh
+```bash
 go get github.com/Trysac/u155-webhook-relay
 ```
 
-Requires Go 1.23 or newer. No dependencies outside the standard library.
-
-## Usage
+## Quick Start
 
 ```go
 package main
 
 import (
-	"errors"
-	"fmt"
-
-	"github.com/Trysac/u155-webhook-relay"
+	"context"
+	"net/http"
+	webhookrelay "github.com/Trysac/u155-webhook-relay"
 )
 
 func main() {
-	// Normalize trims surrounding whitespace and lower-cases the text.
-	out, _ := webhookrelay.Normalize("  Hello World ")
-	fmt.Println(out) // -> "hello world"
-
-	// Blank input is rejected explicitly instead of returning an empty string.
-	if _, err := webhookrelay.Normalize("   "); errors.Is(err, webhookrelay.ErrBlank) {
-		fmt.Println("rejected:", err)
-	}
+	relay, _ := webhookrelay.New(webhookrelay.Config{
+		InboundSecret: []byte("s"),
+		TargetURL:     "https://example.com/dest",
+		QueueSize:     100,
+	})
+	go relay.Run(context.Background())
+	http.ListenAndServe(":8080", relay)
 }
 ```
 
-## Documentation
+## Public API
 
-- [Architecture](docs/ARCHITECTURE.md) and [decisions](docs/decisions/)
-- [Testing](docs/TESTING.md) and [security](docs/SECURITY.md)
-- [Project record](docs/PROJECT.md) and [stack](docs/STACK.md)
-- [Changelog](CHANGELOG.md) and [contributing guide](CONTRIBUTING.md)
+- `New(Config) (*Relay, error)`: Initializes the relay. Returns `ErrInvalidConfig` for invalid inputs (empty secrets, empty URL, QueueSize 0).
+- `(r *Relay) ServeHTTP(http.ResponseWriter, *http.Request)`: HTTP handler. Verifies HMAC-SHA256, enforces MaxBodyBytes, and queues requests. Returns 202 Accepted, 401 Unauthorized, 405 Method Not Allowed, 413 Payload Too Large, or 503 Service Unavailable.
+- `(r *Relay) Run(context.Context) error`: Executes the delivery worker loop. Delivers via FIFO queue.
+- `(r *Relay) Stats() Stats`: Returns current Queued, Delivered, and DeadLettered counts.
+- `(r *Relay) DeadLetters() []DeadLetter`: Returns the list of last 100 dead-lettered webhooks.
 
-## License
+## Why not queue+worker service?
 
-[MIT](LICENSE) (c) 2026 Miguel Gomez
+This is a single small package with no external broker or infrastructure dependencies, designed for low-volume webhooks where a full queueing system adds unnecessary complexity.
+
+See [docs/SECURITY.md](docs/SECURITY.md).

@@ -9,4 +9,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Add webhookrelay store-and-forward relay with HMAC verification, backoff retries, and dead-letter tracking.
 - Initial project structure from the factory utility template.
